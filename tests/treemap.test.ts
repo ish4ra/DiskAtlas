@@ -1,0 +1,3 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {layout} from '../src/renderer/treemap';
+test('treemap preserves proportional area and stays inside bounds',()=>{const r=layout([{id:1,size:60},{id:2,size:30},{id:3,size:10}],100,80);assert.equal(r.length,3);for(const box of r){assert.ok(box.x>=0&&box.y>=0&&box.x+box.w<=100.001&&box.y+box.h<=80.001);assert.ok(Math.abs(box.w*box.h-({1:4800,2:2400,3:800}[box.id]!))<.01);} });
+test('empty and zero-byte trees have no misleading area',()=>{assert.deepEqual(layout([],100,100),[]);assert.deepEqual(layout([{id:1,size:0}],100,100),[]);});
