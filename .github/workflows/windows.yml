@@ -2,7 +2,7 @@ name: Windows build
 on:
   push:
     branches: [main]
-    tags: ['v*']
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 permissions:
@@ -26,7 +26,11 @@ jobs:
       - name: Package installer and portable
         run: npx electron-builder --win --x64 --publish never
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - name: Validate packaged application
+        run: npm run test:e2e
+        env:
+          DISKATLAS_EXECUTABLE: ${{ github.workspace }}/release/win-unpacked/DiskAtlas.exe
       - uses: actions/upload-artifact@v4
         if: always()
         with:

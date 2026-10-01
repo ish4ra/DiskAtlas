@@ -1,11 +1,277 @@
-import {useEffect,useState} from 'react';import {Copy,FolderOpen,ArrowDownUp,ChevronLeft,ChevronRight} from 'lucide-react';
-import type {FilePage,FileQuery,Settings} from '../../shared/types';import {colors} from '../../shared/categories';import {bytes,count} from '../format';
-export function Files({query,setQuery,totalSize,units,onError}:{query:FileQuery;setQuery:(q:FileQuery)=>void;totalSize:number;units:Settings['units'];onError:(s:string)=>void}){
- const [page,setPage]=useState<FilePage>({rows:[],total:0});const [loading,setLoading]=useState(false);
- useEffect(()=>{let live=true;setLoading(true);const timer=setTimeout(()=>{void window.diskatlas.files(query).then(p=>{if(live)setPage(p);}).catch(e=>{if(live)onError(e.message);}).finally(()=>{if(live)setLoading(false);});},160);return()=>{live=false;clearTimeout(timer);};},[query,onError]);
- const sort=(key:FileQuery['sort'])=>setQuery({...query,sort:key,direction:query.sort===key&&query.direction==='desc'?'asc':'desc',offset:0});
- return <section className="panel files-panel"><div className="panel-heading"><div><span className="eyebrow">FIND WHAT TAKES UP SPACE</span><h2>Largest files <span className="badge">{count(page.total)}</span></h2></div><span className="subtle">{loading?'Updating…':'Sorted, searchable, local.'}</span></div>
- <div className="filters"><select aria-label="Category" value={query.category??''} onChange={e=>setQuery({...query,category:e.target.value,offset:0})}><option value="">All file types</option>{Object.keys(colors).map(c=><option key={c}>{c}</option>)}</select><input aria-label="Extension" placeholder="Extension, e.g. .mp4" value={query.extension??''} onChange={e=>setQuery({...query,extension:e.target.value.toLowerCase(),offset:0})}/><input aria-label="Minimum size in MiB" type="number" min="0" placeholder="Min MiB" onChange={e=>setQuery({...query,min:Number(e.target.value)*1048576,offset:0})}/><input aria-label="Maximum size in MiB" type="number" min="0" placeholder="Max MiB" onChange={e=>setQuery({...query,max:e.target.value?Number(e.target.value)*1048576:undefined,offset:0})}/><select aria-label="Results per page" value={query.limit??100} onChange={e=>setQuery({...query,limit:Number(e.target.value),offset:0})}>{[25,50,100,250,500,1000].map(n=><option key={n} value={n}>{n} per page</option>)}</select>{query.scope!==undefined&&<button onClick={()=>setQuery({...query,scope:undefined,offset:0})}>Clear folder scope</button>}</div>
- <div className="table-scroll"><table><thead><tr>{([['name','Name'],['path','Location'],['extension','Type'],['size','Size'],['modified','Modified']] as const).map(([k,label])=><th key={k}><button onClick={()=>sort(k)}>{label}<ArrowDownUp size={11}/></button></th>)}<th>% of scan</th><th>Actions</th></tr></thead><tbody>{page.rows.map(n=><tr key={n.id}><td title={n.name}><i className="file-dot" style={{background:colors[n.category]}}/>{n.name}</td><td className="path-cell" title={n.path}>{n.path}</td><td><span className="type-pill">{n.extension||'none'}</span></td><td className="number">{bytes(n.size,units)}</td><td>{new Date(n.modified).toLocaleDateString()}</td><td><div className="percent"><span style={{width:`${totalSize?n.size/totalSize*100:0}%`}}/>{totalSize?(n.size/totalSize*100).toFixed(2):0}%</div></td><td><div className="row-actions"><button title="Copy path" onClick={()=>void navigator.clipboard.writeText(n.path).catch(e=>onError(e.message))}><Copy size={14}/></button><button title="Reveal in Explorer" onClick={()=>void window.diskatlas.action(n.id,'reveal').catch(e=>onError(e.message))}><FolderOpen size={14}/></button></div></td></tr>)}</tbody></table>{!page.rows.length&&!loading&&<div className="empty-small">No files match these filters.</div>}</div>
- <div className="table-footer"><span>{page.total?count((query.offset??0)+1):0}–{count(Math.min((query.offset??0)+(query.limit??100),page.total))} of {count(page.total)} files</span><div><button disabled={!query.offset} onClick={()=>setQuery({...query,offset:Math.max(0,(query.offset??0)-(query.limit??100))})}><ChevronLeft size={15}/> Previous</button><button disabled={(query.offset??0)+(query.limit??100)>=page.total} onClick={()=>setQuery({...query,offset:(query.offset??0)+(query.limit??100)})}>Next <ChevronRight size={15}/></button></div></div></section>;
+import { useEffect, useState } from "react";
+import {
+  Copy,
+  FolderOpen,
+  ArrowDownUp,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
+import type { FilePage, FileQuery, Settings } from "../../shared/types";
+import { colors } from "../../shared/categories";
+import { bytes, count } from "../format";
+export function Files({
+  query,
+  setQuery,
+  totalSize,
+  units,
+  onError,
+}: {
+  query: FileQuery;
+  setQuery: (q: FileQuery) => void;
+  totalSize: number;
+  units: Settings["units"];
+  onError: (s: string) => void;
+}) {
+  const [page, setPage] = useState<FilePage>({ rows: [], total: 0 });
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    let live = true;
+    setLoading(true);
+    const timer = setTimeout(() => {
+      void window.diskatlas
+        .files(query)
+        .then((p) => {
+          if (live) setPage(p);
+        })
+        .catch((e) => {
+          if (live) onError(e.message);
+        })
+        .finally(() => {
+          if (live) setLoading(false);
+        });
+    }, 160);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [query, onError]);
+  const sort = (key: FileQuery["sort"]) =>
+    setQuery({
+      ...query,
+      sort: key,
+      direction:
+        query.sort === key && query.direction === "desc" ? "asc" : "desc",
+      offset: 0,
+    });
+  return (
+    <section className="panel files-panel">
+      <div className="panel-heading">
+        <div>
+          <span className="eyebrow">FIND WHAT TAKES UP SPACE</span>
+          <h2>
+            Largest files <span className="badge">{count(page.total)}</span>
+          </h2>
+        </div>
+        <span className="subtle">
+          {loading ? "Updating…" : "Sorted, searchable, local."}
+        </span>
+      </div>
+      <div className="filters">
+        <select
+          aria-label="Category"
+          value={query.category ?? ""}
+          onChange={(e) =>
+            setQuery({ ...query, category: e.target.value, offset: 0 })
+          }
+        >
+          <option value="">All file types</option>
+          {Object.keys(colors).map((c) => (
+            <option key={c}>{c}</option>
+          ))}
+        </select>
+        <input
+          aria-label="Extension"
+          placeholder="Extension, e.g. .mp4"
+          value={query.extension ?? ""}
+          onChange={(e) =>
+            setQuery({
+              ...query,
+              extension: e.target.value
+                ? e.target.value.toLowerCase()
+                : undefined,
+              offset: 0,
+            })
+          }
+        />
+        <input
+          aria-label="Minimum size in MiB"
+          type="number"
+          min="0"
+          placeholder="Min MiB"
+          value={query.min === undefined ? "" : query.min / 1048576}
+          onChange={(e) =>
+            setQuery({
+              ...query,
+              min: e.target.value
+                ? Number(e.target.value) * 1048576
+                : undefined,
+              offset: 0,
+            })
+          }
+        />
+        <input
+          aria-label="Maximum size in MiB"
+          type="number"
+          min="0"
+          placeholder="Max MiB"
+          value={query.max === undefined ? "" : query.max / 1048576}
+          onChange={(e) =>
+            setQuery({
+              ...query,
+              max: e.target.value
+                ? Number(e.target.value) * 1048576
+                : undefined,
+              offset: 0,
+            })
+          }
+        />
+        <select
+          aria-label="Results per page"
+          value={query.limit ?? 100}
+          onChange={(e) =>
+            setQuery({ ...query, limit: Number(e.target.value), offset: 0 })
+          }
+        >
+          {[25, 50, 100, 250, 500, 1000].map((n) => (
+            <option key={n} value={n}>
+              {n} per page
+            </option>
+          ))}
+        </select>
+        {query.extension === "" && (
+          <button
+            onClick={() =>
+              setQuery({ ...query, extension: undefined, offset: 0 })
+            }
+          >
+            No extension ×
+          </button>
+        )}
+        {query.scope !== undefined && (
+          <button
+            onClick={() => setQuery({ ...query, scope: undefined, offset: 0 })}
+          >
+            Clear folder scope
+          </button>
+        )}
+      </div>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              {(
+                [
+                  ["name", "Name"],
+                  ["path", "Location"],
+                  ["extension", "Type"],
+                  ["size", "Size"],
+                  ["modified", "Modified"],
+                ] as const
+              ).map(([k, label]) => (
+                <th key={k}>
+                  <button onClick={() => sort(k)}>
+                    {label}
+                    <ArrowDownUp size={11} />
+                  </button>
+                </th>
+              ))}
+              <th>% of scan</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {page.rows.map((n) => (
+              <tr key={n.id}>
+                <td title={n.name}>
+                  <i
+                    className="file-dot"
+                    style={{ background: colors[n.category] }}
+                  />
+                  {n.name}
+                </td>
+                <td className="path-cell" title={n.path}>
+                  {n.path}
+                </td>
+                <td>
+                  <span className="type-pill">{n.extension || "none"}</span>
+                </td>
+                <td className="number">{bytes(n.size, units)}</td>
+                <td>{new Date(n.modified).toLocaleDateString()}</td>
+                <td>
+                  <div className="percent">
+                    <span
+                      style={{
+                        width: `${totalSize ? (n.size / totalSize) * 100 : 0}%`,
+                      }}
+                    />
+                    {totalSize ? ((n.size / totalSize) * 100).toFixed(2) : 0}%
+                  </div>
+                </td>
+                <td>
+                  <div className="row-actions">
+                    <button
+                      title="Copy path"
+                      onClick={() =>
+                        void navigator.clipboard
+                          .writeText(n.path)
+                          .catch((e) => onError(e.message))
+                      }
+                    >
+                      <Copy size={14} />
+                    </button>
+                    <button
+                      title="Reveal in Explorer"
+                      onClick={() =>
+                        void window.diskatlas
+                          .action(n.id, "reveal")
+                          .catch((e) => onError(e.message))
+                      }
+                    >
+                      <FolderOpen size={14} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!page.rows.length && !loading && (
+          <div className="empty-small">No files match these filters.</div>
+        )}
+      </div>
+      <div className="table-footer">
+        <span>
+          {page.total ? count((query.offset ?? 0) + 1) : 0}–
+          {count(
+            Math.min((query.offset ?? 0) + (query.limit ?? 100), page.total),
+          )}{" "}
+          of {count(page.total)} files
+        </span>
+        <div>
+          <button
+            disabled={!query.offset}
+            onClick={() =>
+              setQuery({
+                ...query,
+                offset: Math.max(0, (query.offset ?? 0) - (query.limit ?? 100)),
+              })
+            }
+          >
+            <ChevronLeft size={15} /> Previous
+          </button>
+          <button
+            disabled={(query.offset ?? 0) + (query.limit ?? 100) >= page.total}
+            onClick={() =>
+              setQuery({
+                ...query,
+                offset: (query.offset ?? 0) + (query.limit ?? 100),
+              })
+            }
+          >
+            Next <ChevronRight size={15} />
+          </button>
+        </div>
+      </div>
+    </section>
+  );
 }

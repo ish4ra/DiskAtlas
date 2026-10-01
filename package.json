@@ -12,7 +12,7 @@
     "build": "tsc --noEmit && vite build && node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "node --import tsx --test tests/*.test.ts",
+    "test": "node scripts/build.mjs && node --import tsx --test tests/*.test.ts",
     "test:e2e": "playwright test",
     "package:win": "npm run build && electron-builder --win --x64",
     "start": "electron ."
@@ -46,9 +46,9 @@
     }
   },
   "dependencies": {
+    "lucide-react": "^0.468.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "lucide-react": "^0.468.0"
+    "react-dom": "^19.1.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
@@ -62,6 +62,7 @@
     "esbuild": "^0.25.0",
     "eslint": "^9.0.0",
     "globals": "^16.0.0",
+    "prettier": "^3.9.9",
     "tsx": "^4.0.0",
     "typescript": "^5.9.0",
     "typescript-eslint": "^8.0.0",

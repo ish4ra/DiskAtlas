@@ -1,4 +1,29 @@
-import type { Category } from './types';
-export const colors:Record<Category,string>={Video:'#6489eb',Images:'#4db6aa',Audio:'#a285d8',Archives:'#d5a45d',Documents:'#6db7d9',Executables:'#da7d86',Code:'#8dac72','Disk images':'#b59779',Other:'#7b879b'};
-const groups:Partial<Record<Category,string>>={Video:'mp4 mkv avi mov webm m4v wmv',Images:'jpg jpeg png gif webp svg raw heic bmp ico tiff',Audio:'mp3 flac wav ogg m4a aac opus',Archives:'zip rar 7z tar gz bz2 xz',Documents:'pdf doc docx xls xlsx ppt pptx txt md epub csv',Executables:'exe dll msi sys appx',Code:'ts tsx js jsx py rs go c cpp h css html json java cs vue sql yaml yml','Disk images':'iso img vhd vhdx vmdk qcow2'};
-export function categoryOf(ext:string):Category { return (Object.entries(groups).find(([,list])=>list.split(' ').includes(ext.replace(/^\./,'').toLowerCase()))?.[0] as Category)??'Other'; }
+import type { Category } from "./types";
+export const colors: Record<Category, string> = {
+  Video: "#6489eb",
+  Images: "#4db6aa",
+  Audio: "#a285d8",
+  Archives: "#d5a45d",
+  Documents: "#6db7d9",
+  Executables: "#da7d86",
+  Code: "#8dac72",
+  "Disk images": "#b59779",
+  Other: "#7b879b",
+};
+const groups: Partial<Record<Category, string>> = {
+  Video: "mp4 mkv avi mov webm m4v wmv",
+  Images: "jpg jpeg png gif webp svg raw heic bmp ico tiff",
+  Audio: "mp3 flac wav ogg m4a aac opus",
+  Archives: "zip rar 7z tar gz bz2 xz",
+  Documents: "pdf doc docx xls xlsx ppt pptx txt md epub csv",
+  Executables: "exe dll msi sys appx",
+  Code: "ts tsx js jsx py rs go c cpp h css html json java cs vue sql yaml yml",
+  "Disk images": "iso img vhd vhdx vmdk qcow2",
+};
+export function categoryOf(ext: string): Category {
+  return (
+    (Object.entries(groups).find(([, list]) =>
+      list.split(" ").includes(ext.replace(/^\./, "").toLowerCase()),
+    )?.[0] as Category) ?? "Other"
+  );
+}

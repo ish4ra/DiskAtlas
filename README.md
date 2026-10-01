@@ -67,7 +67,7 @@ The Electron integration test launches a real application, creates and scans rea
 - `src/renderer/`: React shell, views, custom treemap geometry and theme styles.
 - `tests/`: real-filesystem unit tests and Electron end-to-end validation.
 
-The renderer never receives the whole scan tree. Child queries are capped at 1,500 entries and file-table pages at 1,000. A worker keeps scanning/query work off the UI thread. Electron uses a sandboxed preload, context isolation, disabled Node integration and a restrictive content policy.
+The renderer never receives the whole scan tree. Extension details are capped at the largest 1,000 extensions; category totals include all retained files. Child queries are capped at 1,500 entries and file-table pages at 1,000. A worker keeps scanning/query work off the UI thread. Electron uses a sandboxed preload, context isolation, disabled Node integration and a restrictive content policy.
 
 ## Privacy
 
