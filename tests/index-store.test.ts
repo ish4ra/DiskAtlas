@@ -162,3 +162,58 @@ test("future schemas are preserved instead of overwritten", async () => {
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("Unicode substring search and astral-character scoped paths match persisted entries", () => {
+  const db = new IndexStore(":memory:");
+  const root = path.join(path.sep, "📁");
+  const scan = db.begin(root);
+  db.add(scan, {
+    id: 0,
+    parent: null,
+    name: "📁",
+    path: root,
+    extension: "",
+    category: "Other",
+    size: 0,
+    modified: 0,
+    directory: true,
+    children: [],
+  });
+  db.add(scan, {
+    id: 1,
+    parent: 0,
+    name: "Ä.txt",
+    path: path.join(root, "Ä.txt"),
+    extension: ".txt",
+    category: "Documents",
+    size: 1,
+    modified: 0,
+    directory: false,
+    children: [],
+  });
+  db.flush();
+  assert.equal(db.files(scan, { scope: 0, search: "ä" }).total, 1);
+  db.close();
+});
+
+test("retention preserves bounded history, active snapshot and last complete root snapshot", () => {
+  const db = new IndexStore(":memory:");
+  const summary = {
+    root: "/a",
+    status: "complete",
+  } as import("../src/shared/types").Summary;
+  const first = db.begin("/a");
+  db.finish(first, summary);
+  for (let i = 0; i < 5; i++) {
+    const id = db.begin("/a");
+    db.finish(id, { ...summary, status: "cancelled" });
+  }
+  const other = db.begin("/b");
+  db.finish(other, { ...summary, root: "/b" });
+  db.retain(other);
+  assert.equal(db.snapshots().length, 2);
+  assert.equal(db.db.prepare("SELECT count(*) n FROM scans").get()!.n, 4);
+  assert.equal(db.restore(first).status, "complete");
+  assert.equal(db.restore(other).root, "/b");
+  db.close();
+});

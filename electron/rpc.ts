@@ -13,8 +13,11 @@ export class ScannerClient {
     onFailure: (message: string) => void,
     workerPath = path.join(__dirname, "worker.cjs"),
     indexPath?: string,
+    nativeHelper?: string,
   ) {
-    this.worker = new Worker(workerPath, { workerData: { indexPath } });
+    this.worker = new Worker(workerPath, {
+      workerData: { indexPath, nativeHelper },
+    });
     const fail = (e: Error) => {
       if (this.failure) return;
       this.failure = e;

@@ -3,7 +3,7 @@ import {
   type SQLInputValue,
   type StatementSync,
 } from "node:sqlite";
-import { mkdirSync, renameSync } from "node:fs";
+import { mkdirSync, renameSync, existsSync } from "node:fs";
 import path from "node:path";
 import type {
   Entry,
@@ -26,10 +26,17 @@ export class IndexStore {
     } catch (error) {
       db.close();
       if (filename === ":memory:") throw error;
-      renameSync(filename, `${filename}.corrupt-${Date.now()}`);
+      const quarantine = `${filename}.corrupt-${Date.now()}`;
+      renameSync(filename, quarantine);
+      for (const suffix of ["-wal", "-shm"])
+        if (existsSync(filename + suffix))
+          renameSync(filename + suffix, quarantine + suffix);
       db = new DatabaseSync(filename);
     }
     this.db = db;
+    db.function("unicode_lower", { deterministic: true }, (value) =>
+      String(value).toLowerCase(),
+    );
     const version = Number(
       db.prepare("PRAGMA user_version").get()!.user_version,
     );
@@ -83,6 +90,31 @@ export class IndexStore {
     if (!row) throw new Error("Cached scan unavailable.");
     return { ...JSON.parse(String(row.summary)), cached: true };
   }
+  resetEntries(scan: number) {
+    this.flush();
+    this.db.prepare("DELETE FROM entries WHERE scan=?").run(scan);
+    this.db.prepare("DELETE FROM seen_directories WHERE scan=?").run(scan);
+  }
+  retain(active: number) {
+    this.flush();
+    const rootKey =
+      process.platform === "win32" ? "unicode_lower(root)" : "root";
+    this.db.exec("BEGIN");
+    try {
+      this.db
+        .exec(`CREATE TEMP TABLE IF NOT EXISTS retained(id INTEGER PRIMARY KEY); DELETE FROM retained;
+        INSERT OR IGNORE INTO retained SELECT id FROM (SELECT id,row_number() OVER(PARTITION BY ${rootKey} ORDER BY id DESC) rank FROM scans WHERE summary IS NOT NULL) WHERE rank<=2;
+        INSERT OR IGNORE INTO retained SELECT max(id) FROM scans WHERE state='complete' GROUP BY ${rootKey};`);
+      this.db.prepare("INSERT OR IGNORE INTO retained VALUES(?)").run(active);
+      this.db.exec(
+        "DELETE FROM entries WHERE scan NOT IN (SELECT id FROM retained); DELETE FROM seen_directories WHERE scan NOT IN (SELECT id FROM retained); DELETE FROM scans WHERE id NOT IN (SELECT id FROM retained); COMMIT;",
+      );
+    } catch (e) {
+      this.db.exec("ROLLBACK");
+      throw e;
+    }
+    this.db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+  }
   begin(root: string): number {
     return Number(
       this.db
@@ -92,19 +124,25 @@ export class IndexStore {
   }
   add(scan: number, n: Entry) {
     if (!this.pendingWrites) this.db.exec("BEGIN");
-    this.insert.run(
-      scan,
-      n.id,
-      n.parent,
-      n.name,
-      n.path,
-      n.extension,
-      n.category,
-      n.size,
-      n.modified,
-      Number(n.directory),
-      Number(!n.directory),
-    );
+    try {
+      this.insert.run(
+        scan,
+        n.id,
+        n.parent,
+        n.name,
+        n.path,
+        n.extension,
+        n.category,
+        n.size,
+        n.modified,
+        Number(n.directory),
+        Number(!n.directory),
+      );
+    } catch (e) {
+      this.db.exec("ROLLBACK");
+      this.pendingWrites = 0;
+      throw e;
+    }
     if (++this.pendingWrites >= 512) this.flush();
   }
   entry(scan: number, id: number): Entry | undefined {
@@ -246,7 +284,7 @@ export class IndexStore {
       args.push(q.max);
     }
     if (q.search) {
-      conditions.push("instr(lower(path),?)>0");
+      conditions.push("instr(unicode_lower(path),?)>0");
       args.push(q.search.toLowerCase());
     }
     if (q.scope !== undefined) {
@@ -256,8 +294,8 @@ export class IndexStore {
       const prefix = scope.path.endsWith(path.sep)
         ? scope.path
         : scope.path + path.sep;
-      conditions.push("substr(path,1,?)=?");
-      args.push(prefix.length, prefix);
+      conditions.push("instr(path,?)=1");
+      args.push(prefix);
     }
     const sort = ["name", "path", "extension", "size", "modified"].includes(
       q.sort ?? "",

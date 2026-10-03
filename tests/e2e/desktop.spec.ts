@@ -223,3 +223,69 @@ test("real scan, all analysis views, export, settings and cancellation", async (
     await rm(base, { recursive: true, force: true });
   }
 });
+
+test("persistent cache and visualization survive a real application restart", async () => {
+  const base = await mkdtemp(path.join(tmpdir(), "DiskAtlas-restart-"));
+  const root = path.join(base, "root");
+  await mkdir(root);
+  await writeFile(path.join(root, "cached.txt"), "persisted");
+  const launch = () =>
+    electron.launch({
+      executablePath: process.env.DISKATLAS_EXECUTABLE,
+      args: [
+        ...(process.env.DISKATLAS_EXECUTABLE ? [] : ["."]),
+        ...(process.platform === "linux"
+          ? [
+              "--no-sandbox",
+              "--headless",
+              "--ozone-platform=headless",
+              "--disable-gpu",
+            ]
+          : []),
+      ],
+      env: { ...process.env, DISKATLAS_USER_DATA: path.join(base, "profile") },
+    });
+  let app = await launch();
+  try {
+    let page = await app.firstWindow();
+    await page.waitForFunction(() => !!window.diskatlas);
+    await page.evaluate(async (root) => {
+      await new Promise<void>((resolve, reject) => {
+        const off = window.diskatlas.onDone(() => {
+          off();
+          resolve();
+        });
+        void window.diskatlas.start(root).catch(reject);
+      });
+      const s = await window.diskatlas.settings();
+      await window.diskatlas.saveSettings({ ...s, storageView: "treemap" });
+    }, root);
+    await app.close();
+    app = await launch();
+    page = await app.firstWindow();
+    await page.waitForFunction(() => !!window.diskatlas);
+    await expect(
+      page.getByText("Cached snapshot — may be stale", { exact: false }),
+    ).toBeVisible();
+    const state = await page.evaluate(async () => ({
+      summary: await window.diskatlas.summary(),
+      settings: await window.diskatlas.settings(),
+      files: await window.diskatlas.files({}),
+    }));
+    expect(state.summary?.cached).toBe(true);
+    expect(state.files.total).toBe(1);
+    expect(state.settings.storageView).toBe("treemap");
+    await expect(page.locator(".treemap .tile")).toHaveCount(1);
+    await rm(root, { recursive: true });
+    expect(
+      await page.evaluate(
+        async () => (await window.diskatlas.summary())?.unavailable,
+      ),
+    ).toBe(true);
+    await page.evaluate(() => window.diskatlas.clearCache());
+    expect(await page.evaluate(() => window.diskatlas.summary())).toBeNull();
+  } finally {
+    await app.close();
+    await rm(base, { recursive: true, force: true });
+  }
+});

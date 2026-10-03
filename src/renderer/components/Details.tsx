@@ -97,7 +97,13 @@ function Rows({
               <button
                 className="details-name"
                 title={n.path}
-                onClick={() => n.directory && onNavigate(n.id)}
+                onClick={() =>
+                  n.directory
+                    ? onNavigate(n.id)
+                    : void window.diskatlas
+                        .action(n.id, "open")
+                        .catch((e) => onError(e.message))
+                }
               >
                 {n.directory && <Folder size={14} />} {n.name}
               </button>

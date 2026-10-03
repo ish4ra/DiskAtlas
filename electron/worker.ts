@@ -2,6 +2,7 @@ import { parentPort, workerData } from "node:worker_threads";
 import { lstat } from "node:fs/promises";
 import { createWriteStream } from "node:fs";
 import { once } from "node:events";
+import { eligibleNtfs, scanNtfs } from "./ntfs";
 import { scanIndexed } from "./indexed-scanner";
 import { IndexStore } from "./index-store";
 import { csvCell } from "./analysis";
@@ -34,17 +35,43 @@ parentPort!.on(
         stopped = false;
         const scanId = store.begin(args[0] as string);
         try {
-          result = await scanIndexed(
-            store,
-            scanId,
-            args[0] as string,
-            args[1] as ScanOptions,
-            () => stopped,
-            (p) => parentPort!.postMessage({ event: "progress", data: p }),
-          );
-          store.finish(scanId, result);
+          let next: Summary;
+          let fallback: string | undefined;
+          if (
+            workerData?.nativeHelper &&
+            eligibleNtfs(args[0] as string, args[1] as ScanOptions)
+          ) {
+            try {
+              next = await scanNtfs(
+                store,
+                scanId,
+                args[0] as string,
+                workerData.nativeHelper,
+                () => stopped,
+                (p) => parentPort!.postMessage({ event: "progress", data: p }),
+              );
+            } catch (e) {
+              store.resetEntries(scanId);
+              fallback = (e as Error).message;
+            }
+          }
+          if (!next!) {
+            next = await scanIndexed(
+              store,
+              scanId,
+              args[0] as string,
+              args[1] as ScanOptions,
+              () => stopped,
+              (p) => parentPort!.postMessage({ event: "progress", data: p }),
+            );
+            next.backend = "filesystem";
+            next.accelerationFallback = fallback;
+          }
+          store.finish(scanId, next);
+          result = next;
           active = scanId;
           data = result;
+          if (!exporting) store.retain(active);
         } catch (e) {
           store.fail(scanId);
           throw e;
@@ -136,6 +163,7 @@ parentPort!.on(
             throw e;
           } finally {
             exporting--;
+            if (!exporting && !busy) store.retain(active);
           }
           data = destination;
         } else throw new Error("Unsupported request.");

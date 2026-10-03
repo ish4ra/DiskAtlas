@@ -79,3 +79,46 @@ test("invalid export destinations reject and leave the worker usable", async () 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("cache clearing rejects during scanning and restart recovers the last published generation", async () => {
+  const base = await mkdtemp(path.join(tmpdir(), "atlas-recovery-"));
+  const root = path.join(base, "root");
+  await mkdir(root);
+  const index = path.join(base, "index.sqlite");
+  let c = new ScannerClient(
+    () => {},
+    () => {},
+    path.resolve("dist-electron/worker.cjs"),
+    index,
+  );
+  try {
+    await c.call("scan", root, {
+      ignoredFolders: [],
+      ignoredExtensions: [],
+      maxEntries: 1,
+    });
+    for (let i = 0; i < 6000; i++)
+      await writeFile(path.join(root, `${i}.txt`), "x");
+    const scanning = c.call("scan", root, {
+      ignoredFolders: [],
+      ignoredExtensions: [],
+      maxEntries: 1,
+    });
+    await assert.rejects(c.call("clear"), /Wait/);
+    const rejected = assert.rejects(scanning);
+    await c.close();
+    await rejected;
+    c = new ScannerClient(
+      () => {},
+      () => {},
+      path.resolve("dist-electron/worker.cjs"),
+      index,
+    );
+    const summary = await c.call<Summary>("summary");
+    assert.equal(summary.cached, true);
+    assert.equal(summary.files, 0);
+  } finally {
+    await c.close();
+    await rm(base, { recursive: true, force: true });
+  }
+});

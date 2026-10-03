@@ -12,7 +12,7 @@ Logical bytes are counted per path. Physical allocation, sparse/compressed accou
 
 ## NTFS and USN research / deliberate deferral
 
-Reviewed Microsoft's [FSCTL_ENUM_USN_DATA](https://learn.microsoft.com/en-us/windows/win32/api/winioctl/ni-winioctl-fsctl_enum_usn_data), [USN_RECORD_V2](https://learn.microsoft.com/en-us/windows/win32/api/winioctl/ns-winioctl-usn_record_v2), and [FSCTL_READ_USN_JOURNAL](https://learn.microsoft.com/en-us/windows/win32/api/winioctl/ni-winioctl-fsctl_read_usn_journal), plus the official [WizTree description](https://www.diskanalyzer.com/about) and [Everything FAQ](https://www.voidtools.com/faq/).
+Reviewed Microsoft's [FSCTL_ENUM_USN_DATA](https://learn.microsoft.com/en-us/windows/win32/api/winioctl/ni-winioctl-fsctl_enum_usn_data), [USN_RECORD_V2](https://learn.microsoft.com/en-us/windows/win32/api/winioctl/ns-winioctl-usn_record_v2), and [FSCTL_READ_USN_JOURNAL](https://learn.microsoft.com/en-us/windows/win32/api/winioctl/ni-winioctl-fsctl_read_usn_journal), plus the official [WizTree description](https://www.diskanalyzer.com/about) [Everything FAQ](https://www.voidtools.com/faq/), and [TreeSize NTFS notes](https://manuals.jam-software.com/treesize/EN/notesonntfs.html).
 
 MFT enumeration can supply file and parent references efficiently. Its USN records do **not** supply file sizes. Correct storage analysis additionally needs validated metadata retrieval, version-aware record parsing, all relevant hard-link paths, reparse handling, privilege fallback and a coherent scan/journal boundary. No untested raw-volume parser or elevation path is shipped. This release uses normal filesystem traversal on every filesystem. **MFT acceleration and incremental USN replay are not implemented.**
 

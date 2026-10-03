@@ -71,6 +71,9 @@ app.whenReady().then(async () => {
     },
     undefined,
     path.join(app.getPath("userData"), "index.sqlite"),
+    app.isPackaged
+      ? path.join(process.resourcesPath, "native", "diskatlas-ntfs.exe")
+      : path.join(__dirname, "../native/bin/diskatlas-ntfs.exe"),
   );
   const handle = (channel: string, fn: (...args: unknown[]) => unknown) =>
     ipcMain.handle(channel, (event, ...args) => {
@@ -100,7 +103,10 @@ app.whenReady().then(async () => {
         ignoredFolders: settings.ignoredFolders,
         ignoredExtensions: settings.ignoredExtensions,
       })
-      .then(() => send("scan:done"))
+      .then(() => {
+        generation++;
+        send("scan:done");
+      })
       .catch((e) => send("scan:error", e.message))
       .finally(() => {
         busy = false;
@@ -125,6 +131,11 @@ app.whenReady().then(async () => {
     clipboard.writeText(node.path);
   });
   handle("action", async (id, action) => {
+    const actionGeneration = generation;
+    const checkGeneration = () => {
+      if (actionGeneration !== generation)
+        throw new Error("The scan changed. Select the entry again.");
+    };
     if (action !== "reveal" && action !== "open")
       throw new Error("Invalid action.");
     const node = await scanner.call<Entry | undefined>("entry", entryId(id));
@@ -142,6 +153,7 @@ app.whenReady().then(async () => {
         "This entry has become a symbolic link. Rescan before opening.",
       );
     if (action === "reveal") {
+      checkGeneration();
       shell.showItemInFolder(node.path);
       return;
     }
@@ -157,6 +169,7 @@ app.whenReady().then(async () => {
       });
       if (r.response !== 1) return;
     }
+    checkGeneration();
     const error = await shell.openPath(node.path);
     if (error) throw new Error(error);
   });

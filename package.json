@@ -43,7 +43,16 @@
     },
     "portable": {
       "artifactName": "DiskAtlas-${version}-win-${arch}-portable.${ext}"
-    }
+    },
+    "extraResources": [
+      {
+        "from": "native/bin",
+        "to": "native",
+        "filter": [
+          "*.exe"
+        ]
+      }
+    ]
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

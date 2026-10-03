@@ -49,6 +49,11 @@ export interface TypeStat {
 }
 export interface Summary extends Progress {
   cached?: boolean;
+  backend?: "filesystem" | "ntfs";
+  volumeGuid?: string;
+  journalId?: string;
+  nextUsn?: string;
+  accelerationFallback?: string;
   rootIdentity?: string;
   unavailable?: boolean;
   scannedAt?: string;
