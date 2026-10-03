@@ -45,6 +45,19 @@ export function useDiskAtlas() {
         setQuery((q) => ({ ...q, limit: s.resultCount }));
       })
       .catch((e) => onError(e.message));
+    void window.diskatlas
+      .summary()
+      .then(async (s) => {
+        if (s && navigationRequest.current === 0) {
+          const f = await window.diskatlas.folder(0);
+          if (navigationRequest.current === 0) {
+            setSummary(s);
+            setFolder(f);
+            setTarget(s.root);
+          }
+        }
+      })
+      .catch((e) => onError(e.message));
     const offP = window.diskatlas.onProgress(setProgress);
     const offD = window.diskatlas.onDone(() => {
       const request = navigationRequest.current;
@@ -87,8 +100,7 @@ export function useDiskAtlas() {
     navigationRequest.current++;
     setError("");
     setNotice("");
-    setSummary(null);
-    setFolder(null);
+
     setProgress(null);
     setScanning(true);
     setTarget(p);

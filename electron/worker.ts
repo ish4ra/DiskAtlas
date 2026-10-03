@@ -1,12 +1,18 @@
-import { parentPort } from "node:worker_threads";
+import { parentPort, workerData } from "node:worker_threads";
+import { lstat } from "node:fs/promises";
 import { createWriteStream } from "node:fs";
 import { once } from "node:events";
-import { scan } from "./scanner";
-import { folder, queryFiles, summarize, csvCell } from "./analysis";
-import type { FileQuery, ScanOptions, ScanResult } from "../src/shared/types";
-let result: ScanResult | null = null;
+import { scanIndexed } from "./indexed-scanner";
+import { IndexStore } from "./index-store";
+import { csvCell } from "./analysis";
+import type { FileQuery, ScanOptions, Summary } from "../src/shared/types";
+const store = new IndexStore(workerData?.indexPath ?? ":memory:");
+const restored = store.latest();
+let result: Summary | null = restored?.summary ?? null;
+let active = restored?.id ?? 0;
 let stopped = false;
 let busy = false;
+let exporting = 0;
 parentPort!.on(
   "message",
   async ({
@@ -26,29 +32,67 @@ parentPort!.on(
         if (busy) throw new Error("A scan is already running.");
         busy = true;
         stopped = false;
-        result = null;
+        const scanId = store.begin(args[0] as string);
         try {
-          result = await scan(
+          result = await scanIndexed(
+            store,
+            scanId,
             args[0] as string,
             args[1] as ScanOptions,
             () => stopped,
             (p) => parentPort!.postMessage({ event: "progress", data: p }),
           );
-          data = summarize(result);
+          store.finish(scanId, result);
+          active = scanId;
+          data = result;
+        } catch (e) {
+          store.fail(scanId);
+          throw e;
         } finally {
           busy = false;
         }
+      } else if (method === "snapshots") {
+        data = store.snapshots();
+      } else if (method === "restore") {
+        if (busy) throw new Error("Wait for the scan to finish.");
+        result = store.restore(args[0] as number);
+        active = args[0] as number;
+        data = result;
       } else if (method === "summary") {
-        data = result ? summarize(result) : null;
+        if (result) {
+          try {
+            const root = await lstat(result.root);
+            result.unavailable =
+              root.isSymbolicLink() ||
+              !root.isDirectory() ||
+              (!!result.rootIdentity &&
+                result.rootIdentity !== `${root.dev}:${root.ino}`);
+          } catch {
+            result.unavailable = true;
+          }
+        }
+        data = result;
+      } else if (method === "clear") {
+        if (busy || exporting)
+          throw new Error("Wait for scanning and exports to finish.");
+        store.clear();
+        result = null;
       } else {
         if (!result) throw new Error("Scan a folder first.");
         const snapshot = result;
-        if (method === "files") data = queryFiles(result, args[0] as FileQuery);
-        else if (method === "folder") data = folder(result, args[0] as number);
+        const snapshotId = active;
+        if (method === "files")
+          data = store.files(active, args[0] as FileQuery);
+        else if (method === "folder")
+          data = store.folder(
+            active,
+            args[0] as number,
+            args[1] as number,
+            args[2] as string,
+            args[3] as string,
+          );
         else if (method === "entry")
-          data = result.nodes[args[0] as number]
-            ? { ...result.nodes[args[0] as number], children: [] }
-            : undefined;
+          data = store.entry(active, args[0] as number);
         else if (method === "export") {
           const [destination, format, q] = args as [string, string, FileQuery];
           const stream = createWriteStream(destination, { encoding: "utf8" });
@@ -60,25 +104,19 @@ parentPort!.on(
             if (failure) throw failure;
             if (!stream.write(s)) await once(stream, "drain");
           };
+          exporting++;
           try {
             if (format === "json") {
               await write(
-                '{"summary":' +
-                  JSON.stringify(summarize(snapshot)) +
-                  ',"entries":[\n',
+                '{"summary":' + JSON.stringify(snapshot) + ',"entries":[\n',
               );
-              for (let i = 0; i < snapshot.nodes.length; i++)
-                await write(
-                  (i ? ",\n" : "") + JSON.stringify(snapshot.nodes[i]),
-                );
+              let i = 0;
+              for (const entry of store.entries(snapshotId))
+                await write((i++ ? ",\n" : "") + JSON.stringify(entry));
               await write("\n]}");
             } else {
               await write("Name,Path,Type,Size,Modified\r\n");
-              for (const n of queryFiles(snapshot, {
-                ...q,
-                offset: 0,
-                limit: snapshot.nodes.length,
-              }).rows)
+              for (const n of store.entries(snapshotId, q))
                 await write(
                   [
                     n.name,
@@ -96,6 +134,8 @@ parentPort!.on(
           } catch (e) {
             stream.destroy();
             throw e;
+          } finally {
+            exporting--;
           }
           data = destination;
         } else throw new Error("Unsupported request.");

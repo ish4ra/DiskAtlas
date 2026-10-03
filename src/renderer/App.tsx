@@ -22,6 +22,7 @@ import { bytes, count, duration } from "./format";
 import { Treemap } from "./components/Treemap";
 import { Files } from "./pages/Files";
 import { Types } from "./pages/Types";
+import { Details } from "./components/Details";
 import { Explorer } from "./pages/Explorer";
 import { Settings } from "./pages/Settings";
 export function App() {
@@ -102,7 +103,7 @@ export function App() {
                 {scanning
                   ? "Analyzing your files. Keep exploring when the scan finishes."
                   : summary
-                    ? `${summary.root} · ${summary.status === "complete" ? "Scan complete" : summary.status === "cancelled" ? "Cancelled · partial results" : "Entry limit reached · partial results"}`
+                    ? `${summary.root} · ${summary.status === "complete" ? "Scan complete" : summary.status === "cancelled" ? "Cancelled · partial results" : "Partial results"}`
                     : "Find the big files. Understand the folders. Take back your space."}
               </p>
             </div>
@@ -215,12 +216,62 @@ export function App() {
                   )}
                   {(view === "Overview" || view === "Treemap") && (
                     <>
-                      <Treemap
-                        page={folder}
-                        onNavigate={(id) => void navigate(id)}
-                        units={units}
-                        onError={onError}
-                      />
+                      <div
+                        className="storage-switch"
+                        role="group"
+                        aria-label="Storage visualization"
+                      >
+                        {(["details", "treemap"] as const).map((mode) => (
+                          <button
+                            key={mode}
+                            aria-pressed={
+                              (view === "Treemap"
+                                ? "treemap"
+                                : (settings.storageView ?? "details")) === mode
+                            }
+                            onClick={() => {
+                              setView("Overview");
+                              void window.diskatlas
+                                .saveSettings({
+                                  ...settings,
+                                  storageView: mode,
+                                })
+                                .then(setSettings)
+                                .catch((e) => onError(e.message));
+                            }}
+                          >
+                            {mode === "details" ? "Details" : "Treemap"}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="subtle">
+                        {summary.unavailable
+                          ? "Root unavailable or changed — cached data only"
+                          : summary.cached
+                            ? "Cached snapshot — may be stale"
+                            : "Scan snapshot"}{" "}
+                        ·{" "}
+                        {summary.scannedAt
+                          ? new Date(summary.scannedAt).toLocaleString()
+                          : ""}{" "}
+                        · Logical sizes · Refresh to check for changes
+                      </p>
+                      {view !== "Treemap" &&
+                      settings.storageView !== "treemap" ? (
+                        <Details
+                          page={folder}
+                          units={units}
+                          onNavigate={(id) => void navigate(id)}
+                          onError={onError}
+                        />
+                      ) : (
+                        <Treemap
+                          page={folder}
+                          onNavigate={(id) => void navigate(id)}
+                          units={units}
+                          onError={onError}
+                        />
+                      )}
                       {view === "Overview" && (
                         <div className="insights">
                           <div className="panel insight">
@@ -348,8 +399,10 @@ export function App() {
                     <div className="notice">
                       These are partial results.{" "}
                       {summary.status === "limited"
-                        ? "The 500,000-entry safety limit was reached. Scan a smaller folder for a complete analysis."
-                        : "The scan was cancelled before it finished."}
+                        ? "This older scan was limited. Refresh to rebuild its index."
+                        : summary.status === "partial"
+                          ? "Some paths could not be read. See skipped-entry details."
+                          : "The scan was cancelled before it finished."}
                     </div>
                   )}
                 </>

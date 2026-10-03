@@ -21,16 +21,44 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      - name: Validate three-million-entry index
+        run: node --import tsx scripts/benchmark-index.ts
       - run: npm run build
       - run: npm run test:e2e
       - name: Package installer and portable
         run: npx electron-builder --win --x64 --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-      - name: Validate packaged application
+      - name: Install Windows package silently
+        shell: pwsh
+        run: |
+          $target = Join-Path $env:RUNNER_TEMP 'DiskAtlasInstalled'
+          $installer = Join-Path $env:GITHUB_WORKSPACE 'release/DiskAtlas-Setup-0.1.0.exe'
+          $process = Start-Process -FilePath $installer -ArgumentList '/S',"/D=$target" -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw "Installer exited with $($process.ExitCode)" }
+          if (!(Test-Path (Join-Path $target 'DiskAtlas.exe'))) { throw 'Installed executable is missing' }
+      - name: Validate installed application
         run: npm run test:e2e
         env:
-          DISKATLAS_EXECUTABLE: ${{ github.workspace }}/release/win-unpacked/DiskAtlas.exe
+          DISKATLAS_EXECUTABLE: ${{ runner.temp }}/DiskAtlasInstalled/DiskAtlas.exe
+      - name: Validate portable application launch
+        shell: pwsh
+        run: |
+          $portable = Join-Path $env:GITHUB_WORKSPACE 'release/DiskAtlas-0.1.0-win-x64-portable.exe'
+          $env:DISKATLAS_USER_DATA = Join-Path $env:RUNNER_TEMP 'DiskAtlasPortableSmoke'
+          $process = Start-Process -FilePath $portable -PassThru
+          try {
+            $deadline = (Get-Date).AddSeconds(40)
+            $window = $null
+            do {
+              Start-Sleep -Milliseconds 500
+              $window = Get-Process -Name DiskAtlas -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -eq 'DiskAtlas' }
+            } until ($window -or (Get-Date) -gt $deadline)
+            if (!$window) { throw 'Portable application did not create its window' }
+          } finally {
+            Get-Process -Name DiskAtlas -ErrorAction SilentlyContinue | Stop-Process -Force
+            if (!$process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
+          }
       - uses: actions/upload-artifact@v4
         if: always()
         with:

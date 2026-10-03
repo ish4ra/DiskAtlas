@@ -12,7 +12,12 @@ const api: Api = {
   cancel: () => ipcRenderer.invoke("cancel"),
   summary: () => ipcRenderer.invoke("summary"),
   files: (q) => ipcRenderer.invoke("files", q),
-  folder: (id) => ipcRenderer.invoke("folder", id),
+  folder: (id, offset, sort, direction) =>
+    ipcRenderer.invoke("folder", id, offset, sort, direction),
+  snapshots: () => ipcRenderer.invoke("cache:list"),
+  restore: (id) => ipcRenderer.invoke("cache:restore", id),
+  clearCache: () => ipcRenderer.invoke("cache:clear"),
+  copyPath: (id) => ipcRenderer.invoke("copy", id),
   action: (id, a) => ipcRenderer.invoke("action", id, a),
   export: (f, q) => ipcRenderer.invoke("export", f, q),
   settings: () => ipcRenderer.invoke("settings"),

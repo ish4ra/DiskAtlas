@@ -212,8 +212,8 @@ export function Files({
                     <button
                       title="Copy path"
                       onClick={() =>
-                        void navigator.clipboard
-                          .writeText(n.path)
+                        void window.diskatlas
+                          .copyPath(n.id)
                           .catch((e) => onError(e.message))
                       }
                     >

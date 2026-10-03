@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ShieldCheck, Save } from "lucide-react";
 import type { Settings as Preferences } from "../../shared/types";
 export function Settings({
@@ -11,6 +11,15 @@ export function Settings({
   onError: (s: string) => void;
 }) {
   const [draft, setDraft] = useState(value);
+  const [snapshots, setSnapshots] = useState<
+    { id: number; root: string; scannedAt?: string }[]
+  >([]);
+  useEffect(() => {
+    void window.diskatlas
+      .snapshots()
+      .then(setSnapshots)
+      .catch((e) => onError(e.message));
+  }, [onError]);
   const [saved, setSaved] = useState(false);
   const update = (v: Partial<Preferences>) => {
     setDraft({ ...draft, ...v });
@@ -107,6 +116,35 @@ export function Settings({
         />{" "}
         Confirm before opening folders. Files always require confirmation.
       </label>
+      <h3>Saved scans</h3>
+      {snapshots.map((s) => (
+        <button
+          key={s.id}
+          onClick={() =>
+            void window.diskatlas
+              .restore(s.id)
+              .then(() => location.reload())
+              .catch((e) => onError(e.message))
+          }
+        >
+          {s.root} ·{" "}
+          {s.scannedAt ? new Date(s.scannedAt).toLocaleString() : "Cached"}
+        </button>
+      ))}
+      <p className="notice">
+        Cached scans are local snapshots, not live filesystem data. Sizes are
+        logical bytes; hard links are counted per path.
+      </p>
+      <button
+        onClick={() =>
+          void window.diskatlas
+            .clearCache()
+            .then(() => location.reload())
+            .catch((e) => onError(e.message))
+        }
+      >
+        Clear cached scans
+      </button>
       <div className="settings-footer">
         <p>
           <ShieldCheck size={18} /> Your files stay on your computer. No

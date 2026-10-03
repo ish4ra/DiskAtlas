@@ -1,5 +1,13 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
-import { readFile, writeFile, rename, mkdir, lstat } from "node:fs/promises";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  shell,
+  clipboard,
+} from "electron";
+import { lstat } from "node:fs/promises";
+import { PreferencesStore } from "./preferences";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { ScannerClient } from "./rpc";
@@ -10,7 +18,12 @@ import {
   validateSettings,
   validateTarget,
 } from "./validation";
-import { defaults, type Entry, type Settings } from "../src/shared/types";
+import {
+  defaults,
+  type Entry,
+  type Settings,
+  type Summary,
+} from "../src/shared/types";
 let win: BrowserWindow;
 let scanner: ScannerClient;
 let settings: Settings = { ...defaults };
@@ -18,15 +31,11 @@ let busy = false;
 let generation = 0;
 if (process.env.DISKATLAS_USER_DATA)
   app.setPath("userData", process.env.DISKATLAS_USER_DATA);
-const settingsPath = () => path.join(app.getPath("userData"), "settings.json");
+const preferences = new PreferencesStore(
+  path.join(app.getPath("userData"), "settings.json"),
+);
 app.whenReady().then(async () => {
-  try {
-    settings = validateSettings(
-      JSON.parse(await readFile(settingsPath(), "utf8")),
-    );
-  } catch {
-    /* First launch or corrupt preferences use safe defaults. */
-  }
+  settings = await preferences.load();
   win = new BrowserWindow({
     width: 1440,
     height: 940,
@@ -60,6 +69,8 @@ app.whenReady().then(async () => {
       busy = false;
       send("scan:error", e);
     },
+    undefined,
+    path.join(app.getPath("userData"), "index.sqlite"),
   );
   const handle = (channel: string, fn: (...args: unknown[]) => unknown) =>
     ipcMain.handle(channel, (event, ...args) => {
@@ -88,7 +99,6 @@ app.whenReady().then(async () => {
       .call("scan", root, {
         ignoredFolders: settings.ignoredFolders,
         ignoredExtensions: settings.ignoredExtensions,
-        maxEntries: 500000,
       })
       .then(() => send("scan:done"))
       .catch((e) => send("scan:error", e.message))
@@ -99,12 +109,31 @@ app.whenReady().then(async () => {
   handle("cancel", () => scanner.call("cancel"));
   handle("summary", () => scanner.call("summary"));
   handle("files", (q) => scanner.call("files", validateQuery(q)));
-  handle("folder", (id) => scanner.call("folder", entryId(id)));
+  handle("folder", (id, offset, sort, direction) => {
+    const q = validateQuery({ offset, sort, direction });
+    return scanner.call("folder", entryId(id), q.offset, q.sort, q.direction);
+  });
+  handle("cache:list", () => scanner.call("snapshots"));
+  handle("cache:restore", (id) => {
+    generation++;
+    return scanner.call("restore", entryId(id));
+  });
+  handle("cache:clear", () => scanner.call("clear"));
+  handle("copy", async (id) => {
+    const node = await scanner.call<Entry | undefined>("entry", entryId(id));
+    if (!node) throw new Error("Entry no longer exists.");
+    clipboard.writeText(node.path);
+  });
   handle("action", async (id, action) => {
     if (action !== "reveal" && action !== "open")
       throw new Error("Invalid action.");
     const node = await scanner.call<Entry | undefined>("entry", entryId(id));
     if (!node) throw new Error("Entry no longer exists.");
+    const snapshot = await scanner.call<Summary>("summary");
+    if (snapshot.unavailable)
+      throw new Error(
+        "The scanned root is unavailable or changed. Reconnect it and rescan before opening entries.",
+      );
     const s = await lstat(node.path);
     if (s.isDirectory() !== node.directory)
       throw new Error("This entry changed type. Rescan before opening.");
@@ -149,11 +178,7 @@ app.whenReady().then(async () => {
   });
   handle("settings", () => settings);
   handle("settings:save", async (input) => {
-    const next = validateSettings(input);
-    await mkdir(app.getPath("userData"), { recursive: true });
-    await writeFile(settingsPath() + ".tmp", JSON.stringify(next, null, 2));
-    await rename(settingsPath() + ".tmp", settingsPath());
-    settings = next;
+    settings = await preferences.save(validateSettings(input));
     return settings;
   });
   await win.loadURL(url);

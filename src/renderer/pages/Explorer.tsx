@@ -59,7 +59,7 @@ function Row({
         </button>
         <span>
           {node.directory
-            ? `${Math.abs(node.children[0] ?? 0)} children`
+            ? `${node.fileCount ?? 0} files · ${node.folderCount ?? 0} folders`
             : node.extension || "File"}
         </span>
         <b>{bytes(node.size, units)}</b>
@@ -134,7 +134,7 @@ export function Explorer({
       </div>
       {page.omitted > 0 && (
         <p className="notice">
-          Showing the 1,500 largest immediate children. {page.omitted} more are
+          Showing the 200 largest immediate children. {page.omitted} more are
           available through file search/export.
         </p>
       )}

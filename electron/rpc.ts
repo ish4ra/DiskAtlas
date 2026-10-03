@@ -12,8 +12,9 @@ export class ScannerClient {
     onProgress: (p: unknown) => void,
     onFailure: (message: string) => void,
     workerPath = path.join(__dirname, "worker.cjs"),
+    indexPath?: string,
   ) {
-    this.worker = new Worker(workerPath);
+    this.worker = new Worker(workerPath, { workerData: { indexPath } });
     const fail = (e: Error) => {
       if (this.failure) return;
       this.failure = e;

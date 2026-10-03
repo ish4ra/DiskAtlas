@@ -19,6 +19,8 @@ export interface Entry {
   modified: number;
   directory: boolean;
   children: number[];
+  fileCount?: number;
+  folderCount?: number;
 }
 export interface Progress {
   files: number;
@@ -30,7 +32,7 @@ export interface Progress {
 }
 export interface ScanResult extends Progress {
   nodes: Entry[];
-  status: "complete" | "cancelled" | "limited";
+  status: "complete" | "cancelled" | "limited" | "partial";
   warnings: string[];
   root: string;
 }
@@ -46,6 +48,10 @@ export interface TypeStat {
   count: number;
 }
 export interface Summary extends Progress {
+  cached?: boolean;
+  rootIdentity?: string;
+  unavailable?: boolean;
+  scannedAt?: string;
   root: string;
   status: ScanResult["status"];
   warnings: string[];
@@ -85,6 +91,7 @@ export interface Drive {
   label: string;
 }
 export interface Settings {
+  storageView?: "details" | "treemap";
   theme: "dark" | "light" | "system";
   defaultTarget: string;
   ignoredFolders: string[];
@@ -94,6 +101,7 @@ export interface Settings {
   confirmOpen: boolean;
 }
 export const defaults: Settings = {
+  storageView: "details",
   theme: "dark",
   defaultTarget: "",
   ignoredFolders: [],
@@ -109,7 +117,16 @@ export interface Api {
   cancel: () => Promise<void>;
   summary: () => Promise<Summary | null>;
   files: (q: FileQuery) => Promise<FilePage>;
-  folder: (id: number) => Promise<FolderPage>;
+  folder: (
+    id: number,
+    offset?: number,
+    sort?: "name" | "size" | "modified",
+    direction?: "asc" | "desc",
+  ) => Promise<FolderPage>;
+  clearCache: () => Promise<void>;
+  snapshots: () => Promise<{ id: number; root: string; scannedAt?: string }[]>;
+  restore: (id: number) => Promise<Summary>;
+  copyPath: (id: number) => Promise<void>;
   action: (id: number, action: "reveal" | "open") => Promise<void>;
   export: (format: "json" | "csv", q: FileQuery) => Promise<string | null>;
   settings: () => Promise<Settings>;

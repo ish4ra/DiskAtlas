@@ -1214,3 +1214,14 @@ tr:hover td {
     transition: none !important;
   }
 }
+
+.storage-switch { display:flex;gap:6px;margin:12px 0; }
+.storage-switch button[aria-pressed="true"] { background:#2877d7;color:white; }
+.details { overflow:auto; }
+.details-row { display:grid;grid-template-columns:26px minmax(160px,1fr) 110px 130px 70px 70px 52px 58px;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--border);font-size:12px; }
+.details-row button { padding:3px;background:transparent; }
+.details-name { text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.details-header { opacity:.65; }
+.usage-bar { position:relative;text-align:right;padding:4px;border-radius:3px;overflow:hidden; }
+.usage-bar i { position:absolute;left:0;top:0;bottom:0;background:#3988dc44;pointer-events:none; }
+.details-paging { display:flex;gap:15px;align-items:center;padding:12px; }

@@ -71,6 +71,18 @@ test("real scan, all analysis views, export, settings and cancellation", async (
       timeout: 30000,
     });
     await expect(page.locator(".stats")).toContainText("13");
+    await expect(
+      page.getByRole("heading", { name: "Storage details" }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Expand Media", exact: true })
+      .click();
+    await expect(page.locator(".details")).toContainText("Landscape-film.mp4");
+    await page.screenshot({ path: "test-results/details.png", fullPage: true });
+    await page
+      .getByRole("group", { name: "Storage visualization" })
+      .getByRole("button", { name: "Treemap", exact: true })
+      .click();
     await expect(page.locator(".treemap .tile")).toHaveCount(5);
     await page.screenshot({
       path: "test-results/overview.png",
@@ -88,6 +100,10 @@ test("real scan, all analysis views, export, settings and cancellation", async (
     await expect(page.locator("tbody")).toContainText("Landscape-film.mp4");
     await page.getByRole("textbox", { name: "Search files" }).fill("");
     await expect(page.locator("tbody tr")).toHaveCount(13);
+    await page.getByTitle("Copy path", { exact: true }).first().click();
+    await expect
+      .poll(() => application.evaluate(({ clipboard }) => clipboard.readText()))
+      .toBe(path.join(root, "Media", "Landscape-film.mp4"));
     await page.screenshot({
       path: "test-results/largest-files.png",
       fullPage: true,
@@ -171,6 +187,36 @@ test("real scan, all analysis views, export, settings and cancellation", async (
       return done;
     }, root);
     expect(["cancelled", "complete"]).toContain(status);
+    // Export must not silently change snapshots while its native dialog is open.
+    await application.evaluate(
+      ({ dialog }, file) => {
+        dialog.showSaveDialog = async () => {
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          return { canceled: false, filePath: file };
+        };
+      },
+      path.join(base, "stale.json"),
+    );
+    const staleExport = await page.evaluate(async (target) => {
+      const saving = window.diskatlas.export("json", {}).then(
+        () => "saved",
+        (e) => String(e),
+      );
+      await window.diskatlas.start(target);
+      return saving;
+    }, root);
+    expect(staleExport).toContain("scan changed");
+    await page.evaluate(async () => {
+      const s = await window.diskatlas.settings();
+      await Promise.all([
+        window.diskatlas.saveSettings({ ...s, resultCount: 50 }),
+        window.diskatlas.saveSettings({ ...s, resultCount: 250 }),
+      ]);
+    });
+    expect(
+      JSON.parse(await readFile(path.join(userData, "settings.json"), "utf8"))
+        .resultCount,
+    ).toBe(250);
     expect(errors).toEqual([]);
   } finally {
     await application.close();

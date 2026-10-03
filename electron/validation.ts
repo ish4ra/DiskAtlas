@@ -38,6 +38,7 @@ export function validateSettings(v: unknown): Settings {
     throw new Error("Invalid settings.");
   if (s.defaultTarget) validateTarget(s.defaultTarget);
   return {
+    storageView: s.storageView === "treemap" ? "treemap" : "details",
     theme: s.theme as Settings["theme"],
     units: s.units as Settings["units"],
     confirmOpen: s.confirmOpen,
@@ -81,7 +82,7 @@ export function validateQuery(v: unknown): FileQuery {
   return out as FileQuery;
 }
 export function entryId(v: unknown): number {
-  if (typeof v !== "number" || !Number.isInteger(v) || v < 0 || v > 500000)
+  if (typeof v !== "number" || !Number.isSafeInteger(v) || v < 0)
     throw new Error("Invalid entry.");
   return v;
 }
