@@ -25,12 +25,12 @@ Real Electron screenshots from scans of actual test-directory files are captured
 
 ## Install
 
-The current build is **0.2.0-rc.1**, a release candidate. No stable release is implied by passing CI.
+The current version is **0.2.0** for Windows x64. See the documented limitations below.
 
-Windows 10/11 x64. Download from [Releases](https://github.com/ish4ra/DiskAtlas/releases), when a release is published, or open the latest successful [Windows build](https://github.com/ish4ra/DiskAtlas/actions/workflows/windows.yml) and download `DiskAtlas-0.2.0-rc.1-Windows-x64` under Artifacts (GitHub sign-in required).
+Windows 10/11 x64. Download the installer or portable executable from [Releases](https://github.com/ish4ra/DiskAtlas/releases), or open the latest successful [Windows build](https://github.com/ish4ra/DiskAtlas/actions/workflows/windows.yml) and download `DiskAtlas-0.2.0-Windows-x64` under Artifacts (GitHub sign-in required).
 
-- `DiskAtlas-Setup-0.2.0-rc.1.exe`: install with a choice of location.
-- `DiskAtlas-0.2.0-rc.1-win-x64-portable.exe`: run without installing.
+- `DiskAtlas-Setup-0.2.0.exe`: install with a choice of location.
+- `DiskAtlas-0.2.0-win-x64-portable.exe`: run without installing.
 
 Builds are not code-signed. Windows may show an unknown-publisher/SmartScreen prompt. Verify that your download came from this repository. Administrator privileges are not required; inaccessible locations are skipped.
 
@@ -90,7 +90,7 @@ File paths and metadata stay on your device. Scans persist in a local SQLite dat
 - Cancellation is cooperative between filesystem operations. A slow/unresponsive device may delay cancellation.
 - Installer is unsigned; Windows x64 is the supported release target.
 
-## Roadmap: v0.2.0
+## Roadmap
 
 Expand native NTFS compatibility and validate incremental USN replay, scan diffs, physical allocation and hard-link awareness. See [architecture and measured limits](docs/index-architecture.md). Improve accessibility and expand Windows hardware coverage.
 
