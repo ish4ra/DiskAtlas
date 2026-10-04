@@ -39,13 +39,15 @@ static void selftest(){
 int wmain(int argc,wchar_t** argv){
  try{
   if(argc==2&&std::wstring(argv[1])==L"--self-test"){selftest();return 0;}
-  check(argc==2,"Expected one drive root");std::wstring root=argv[1];
+  const bool probe=argc==3&&std::wstring(argv[1])==L"--probe";
+  check(argc==2||probe,"Expected one drive root");std::wstring root=argv[probe?2:1];
   check(root.size()==3&&root[1]==L':'&&root[2]==L'\\',"Whole drive required");
   check(GetDriveTypeW(root.c_str())==DRIVE_FIXED,"Local fixed volume required");
   WCHAR fs[64]{},guid[128]{};DWORD serial=0;
   check(GetVolumeInformationW(root.c_str(),nullptr,0,&serial,nullptr,nullptr,fs,64)!=0,"Volume probe failed");
   check(std::wstring(fs)==L"NTFS","NTFS required");
   check(GetVolumeNameForVolumeMountPointW(root.c_str(),guid,128)!=0,"Volume identity unavailable");
+  if(probe){std::cout<<"{\"volumeGuid\":"<<quote(guid)<<"}\n";return 0;}
   std::wstring device=L"\\\\.\\"+root.substr(0,2);
   Handle volume(CreateFileW(device.c_str(),GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,nullptr,OPEN_EXISTING,0,nullptr));
   check(volume.value!=INVALID_HANDLE_VALUE,"Read-only MFT access unavailable");

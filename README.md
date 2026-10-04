@@ -25,10 +25,12 @@ Real Electron screenshots from scans of actual test-directory files are captured
 
 ## Install
 
-Windows 10/11 x64. Download from [Releases](https://github.com/ish4ra/DiskAtlas/releases), when a release is published, or open the latest successful [Windows build](https://github.com/ish4ra/DiskAtlas/actions/workflows/windows.yml) and download `DiskAtlas-0.1.0-Windows-x64` under Artifacts (GitHub sign-in required).
+The current build is **0.2.0-rc.1**, a release candidate. No stable release is implied by passing CI.
 
-- `DiskAtlas-Setup-0.1.0.exe`: install with a choice of location.
-- `DiskAtlas-0.1.0-win-x64-portable.exe`: run without installing.
+Windows 10/11 x64. Download from [Releases](https://github.com/ish4ra/DiskAtlas/releases), when a release is published, or open the latest successful [Windows build](https://github.com/ish4ra/DiskAtlas/actions/workflows/windows.yml) and download `DiskAtlas-0.2.0-rc.1-Windows-x64` under Artifacts (GitHub sign-in required).
+
+- `DiskAtlas-Setup-0.2.0-rc.1.exe`: install with a choice of location.
+- `DiskAtlas-0.2.0-rc.1-win-x64-portable.exe`: run without installing.
 
 Builds are not code-signed. Windows may show an unknown-publisher/SmartScreen prompt. Verify that your download came from this repository. Administrator privileges are not required; inaccessible locations are skipped.
 
@@ -58,10 +60,11 @@ npm run test:e2e
 npm run package:win
 ```
 
-The Electron integration test launches a real application, creates and scans real temporary files, exercises views and search, exports JSON/CSV, verifies preferences and checks renderer errors. Linux desktop testing needs a graphical session or compatible headless Electron environment. Windows packaging is performed on `windows-latest` CI. No browser-only filesystem mock is shipped.
+The Electron integration test launches a real application, creates and scans real temporary files, exercises views and search, exports JSON/CSV, verifies preferences and checks renderer errors. Linux desktop testing needs a graphical session or compatible headless Electron environment. Windows packaging is performed on `windows-latest` CI. Building the optional native helper locally requires an x64 MSVC developer shell: `mkdir native\bin` then `cl /EHsc /std:c++17 /O2 /Fe:native\bin\diskatlas-ntfs.exe native\ntfs.cpp`. Without the helper, development scans use traversal. No browser-only filesystem mock is shipped.
 
 ## Architecture
 
+- `native/ntfs.cpp`, `electron/ntfs.ts`: guarded read-only MFT enumeration and disk-backed native staging.
 - `electron/indexed-scanner.ts`, `index-store.ts`: disk-backed traversal, SQLite entries/queue/queries, snapshots and aggregation.
 - `electron/scanner.ts`, `analysis.ts`: small-fixture regression reference for the original scanner.
 - `electron/worker.ts`: scan lifecycle, generation-stable queries and streaming exports.
@@ -78,8 +81,8 @@ File paths and metadata stay on your device. Scans persist in a local SQLite dat
 
 ## Current limitations
 
-- v0.1.0 uses filesystem traversal, not NTFS MFT access. It will be slower than MFT-based tools on whole drives.
-- No production entry-count ceiling. Disk capacity and scan duration remain practical limits. Generations currently accumulate until cleared; automatic cache retention is not implemented. Synthetic three-million-entry validation is documented in [index architecture](docs/index-architecture.md).
+- A read-only MFT backend is available for eligible, quiescent local NTFS drive roots. Missing privileges/journal support, hard links, exclusions or concurrent changes cause indexed traversal fallback. No elevation prompt or administrator service is installed; ordinary non-elevated sessions commonly use traversal.
+- No production entry-count ceiling. Disk capacity and scan duration remain practical limits. Retention preserves two recent snapshots per root, the last complete snapshot and the active snapshot; old pages are reused. Synthetic three-million-entry validation is documented in [index architecture](docs/index-architecture.md).
 - Sizes are logical file lengths, not allocated clusters. Hard links are counted by path. Compression, sparse files, inaccessible files and filesystem overhead mean totals can differ from drive usage.
 - Symlinks and junctions are skipped; the root must be a real directory. Only the first 100 detailed errors are retained.
 - Treemaps show immediate children of the current folder. Beyond 200 children, remaining nonzero bytes are grouped into a labeled block. Details pages through all children; the legacy Explorer shows the largest 200. File queries and JSON export include all indexed entries.
@@ -89,7 +92,7 @@ File paths and metadata stay on your device. Scans persist in a local SQLite dat
 
 ## Roadmap: v0.2.0
 
-Implement and validate a native NTFS MFT/USN backend, automatic cache retention, scan diffs, physical allocation and hard-link awareness. See [architecture and measured limits](docs/index-architecture.md). Improve accessibility and expand Windows hardware coverage.
+Expand native NTFS compatibility and validate incremental USN replay, scan diffs, physical allocation and hard-link awareness. See [architecture and measured limits](docs/index-architecture.md). Improve accessibility and expand Windows hardware coverage.
 
 ## Contributing
 

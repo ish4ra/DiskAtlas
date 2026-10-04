@@ -229,6 +229,8 @@ test("persistent cache and visualization survive a real application restart", as
   const root = path.join(base, "root");
   await mkdir(root);
   await writeFile(path.join(root, "cached.txt"), "persisted");
+  for (let i = 0; i < 205; i++)
+    await writeFile(path.join(root, `file-${i}.txt`), "");
   const launch = () =>
     electron.launch({
       executablePath: process.env.DISKATLAS_EXECUTABLE,
@@ -257,9 +259,26 @@ test("persistent cache and visualization survive a real application restart", as
         });
         void window.diskatlas.start(root).catch(reject);
       });
-      const s = await window.diskatlas.settings();
-      await window.diskatlas.saveSettings({ ...s, storageView: "treemap" });
     }, root);
+    await page.getByLabel("Details sort").selectOption("name");
+    await expect(page.locator(".details-name").first()).toContainText(
+      "file-99.txt",
+    );
+    await page
+      .getByRole("button", { name: "Next children", exact: true })
+      .click();
+    await expect(page.locator(".details-paging")).toContainText("201–206");
+    await page
+      .getByRole("group", { name: "Storage visualization" })
+      .getByRole("button", { name: "Treemap", exact: true })
+      .click();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          async () => (await window.diskatlas.settings()).storageView,
+        ),
+      )
+      .toBe("treemap");
     await app.close();
     app = await launch();
     page = await app.firstWindow();
@@ -273,7 +292,7 @@ test("persistent cache and visualization survive a real application restart", as
       files: await window.diskatlas.files({}),
     }));
     expect(state.summary?.cached).toBe(true);
-    expect(state.files.total).toBe(1);
+    expect(state.files.total).toBe(206);
     expect(state.settings.storageView).toBe("treemap");
     await expect(page.locator(".treemap .tile")).toHaveCount(1);
     await rm(root, { recursive: true });

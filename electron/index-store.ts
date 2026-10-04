@@ -40,7 +40,7 @@ export class IndexStore {
     const version = Number(
       db.prepare("PRAGMA user_version").get()!.user_version,
     );
-    if (version > 1) {
+    if (version > 2) {
       db.close();
       throw new Error("This index was created by a newer DiskAtlas version.");
     }
@@ -52,7 +52,7 @@ export class IndexStore {
       CREATE INDEX IF NOT EXISTS entry_size ON entries(scan,directory,size DESC);
       CREATE INDEX IF NOT EXISTS entry_extension ON entries(scan,directory,extension);
       CREATE INDEX IF NOT EXISTS entry_pending ON entries(scan,directory,visited,id);
-      PRAGMA user_version=1;
+      PRAGMA user_version=2;
       UPDATE scans SET state='interrupted' WHERE state='scanning';`);
     this.insert = db.prepare(
       "INSERT INTO entries(scan,id,parent,name,path,extension,category,size,modified,directory,files) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
@@ -72,16 +72,26 @@ export class IndexStore {
     );
   }
   snapshots() {
+    const rootKey =
+      process.platform === "win32" ? "unicode_lower(root)" : "root";
     return this.db
       .prepare(
-        "SELECT id,root,summary FROM scans WHERE summary IS NOT NULL AND id IN (SELECT max(id) FROM scans WHERE summary IS NOT NULL GROUP BY root) ORDER BY id DESC LIMIT 100",
+        `SELECT id,root,summary FROM scans WHERE summary IS NOT NULL AND id IN (SELECT max(id) FROM scans WHERE summary IS NOT NULL GROUP BY ${rootKey}) ORDER BY id DESC LIMIT 100`,
       )
       .all()
-      .map((row) => ({
-        id: Number(row.id),
-        root: String(row.root),
-        scannedAt: (JSON.parse(String(row.summary)) as Summary).scannedAt,
-      }));
+      .flatMap((row) => {
+        try {
+          return [
+            {
+              id: Number(row.id),
+              root: String(row.root),
+              scannedAt: (JSON.parse(String(row.summary)) as Summary).scannedAt,
+            },
+          ];
+        } catch {
+          return [];
+        }
+      });
   }
   restore(id: number): Summary {
     const row = this.db
@@ -222,16 +232,30 @@ export class IndexStore {
     this.db.prepare("UPDATE scans SET state='failed' WHERE id=?").run(scan);
   }
   latest(): { id: number; summary: Summary } | null {
-    const row = this.db
-      .prepare(
-        "SELECT id,summary FROM scans WHERE summary IS NOT NULL ORDER BY id DESC LIMIT 1",
-      )
-      .get();
-    if (!row) return null;
-    return {
-      id: Number(row.id),
-      summary: { ...JSON.parse(String(row.summary)), cached: true },
-    };
+    for (;;) {
+      const row = this.db
+        .prepare(
+          "SELECT id,summary FROM scans WHERE summary IS NOT NULL ORDER BY id DESC LIMIT 1",
+        )
+        .get();
+      if (!row) return null;
+      try {
+        const summary = JSON.parse(String(row.summary)) as Summary;
+        if (
+          !summary ||
+          typeof summary.root !== "string" ||
+          !["complete", "partial", "cancelled", "limited"].includes(
+            summary.status,
+          )
+        )
+          throw new Error("Invalid snapshot metadata");
+        return { id: Number(row.id), summary: { ...summary, cached: true } };
+      } catch {
+        this.db
+          .prepare("UPDATE scans SET summary=NULL,state='failed' WHERE id=?")
+          .run(Number(row.id));
+      }
+    }
   }
   types(scan: number) {
     return this.db
@@ -294,8 +318,12 @@ export class IndexStore {
       const prefix = scope.path.endsWith(path.sep)
         ? scope.path
         : scope.path + path.sep;
-      conditions.push("instr(path,?)=1");
-      args.push(prefix);
+      conditions.push(
+        process.platform === "win32"
+          ? "instr(unicode_lower(path),?)=1"
+          : "instr(path,?)=1",
+      );
+      args.push(process.platform === "win32" ? prefix.toLowerCase() : prefix);
     }
     const sort = ["name", "path", "extension", "size", "modified"].includes(
       q.sort ?? "",

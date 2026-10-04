@@ -1,4 +1,5 @@
-import { spawn } from "node:child_process";
+import { spawn, execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { createInterface } from "node:readline";
 import { lstat } from "node:fs/promises";
 import path from "node:path";
@@ -12,6 +13,20 @@ import type {
   TypeStat,
 } from "../src/shared/types";
 
+export async function probeVolume(
+  helper: string,
+  root: string,
+): Promise<string> {
+  const { stdout } = await promisify(execFile)(
+    helper,
+    ["--probe", path.win32.parse(root).root],
+    { windowsHide: true, timeout: 3000, maxBuffer: 4096 },
+  );
+  const result = JSON.parse(stdout);
+  if (typeof result.volumeGuid !== "string")
+    throw new Error("Volume identity unavailable");
+  return result.volumeGuid;
+}
 export function eligibleNtfs(root: string, options: ScanOptions) {
   return (
     process.platform === "win32" &&
@@ -136,7 +151,9 @@ export async function scanNtfs(
       backend: "ntfs",
       volumeGuid: header.volumeGuid,
       journalId: header.journalId,
-      nextUsn: done.skipped === 0 ? done.nextUsn : undefined,
+      // A stable observed journal cursor alone cannot reconcile in-flight writes.
+      // Do not persist nextUsn as a replay checkpoint until replay is implemented.
+
       scannedAt: new Date(started).toISOString(),
       cached: false,
       files: 0,

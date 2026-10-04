@@ -217,3 +217,64 @@ test("retention preserves bounded history, active snapshot and last complete roo
   assert.equal(db.restore(other).root, "/b");
   db.close();
 });
+
+test("schema upgrade preserves valid snapshots and malformed metadata falls back safely", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "atlas-migrate-"));
+  try {
+    const file = path.join(dir, "index.sqlite");
+    let db = new IndexStore(file);
+    const first = db.begin("/first");
+    db.finish(first, {
+      root: "/first",
+      status: "complete",
+    } as import("../src/shared/types").Summary);
+    const broken = db.begin("/broken");
+    db.db
+      .prepare(
+        "UPDATE scans SET summary='invalid json',state='complete' WHERE id=?",
+      )
+      .run(broken);
+    db.db.exec("PRAGMA user_version=1");
+    db.close();
+    db = new IndexStore(file);
+    assert.equal(db.db.prepare("PRAGMA user_version").get()!.user_version, 2);
+    assert.equal(db.latest()!.id, first);
+    db.close();
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a real directory disappearing between metadata and enumeration yields partial results", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "atlas-disappear-"));
+  try {
+    const root = path.join(dir, "root");
+    const gone = path.join(root, "gone");
+    await mkdir(gone, { recursive: true });
+    await writeFile(path.join(root, "keep.txt"), "safe");
+    const { lstat, opendir } = await import("node:fs/promises");
+    const db = new IndexStore(path.join(dir, "index.sqlite"));
+    const id = db.begin(root);
+    const result = await scanIndexed(
+      db,
+      id,
+      root,
+      { ignoredFolders: [], ignoredExtensions: [], maxEntries: 1 },
+      () => false,
+      () => {},
+      {
+        stat: lstat,
+        open: async (p) => {
+          if (p === gone) await rm(gone, { recursive: true });
+          return opendir(p);
+        },
+      },
+    );
+    assert.equal(result.status, "partial");
+    assert.equal(result.bytes, 4);
+    assert.equal(result.skipped, 1);
+    db.close();
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

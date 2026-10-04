@@ -1225,3 +1225,4 @@ tr:hover td {
 .usage-bar { position:relative;text-align:right;padding:4px;border-radius:3px;overflow:hidden; }
 .usage-bar i { position:absolute;left:0;top:0;bottom:0;background:#3988dc44;pointer-events:none; }
 .details-paging { display:flex;gap:15px;align-items:center;padding:12px; }
+.details-row .details-name { justify-content:flex-start;border-color:transparent; }

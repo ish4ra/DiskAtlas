@@ -52,7 +52,7 @@ export function Sidebar({
           </span>
         </div>
         <div className="version">
-          DiskAtlas <span>v0.1.0</span>
+          DiskAtlas <span>v0.2.0-rc.1</span>
         </div>
       </div>
     </aside>

@@ -254,6 +254,10 @@ export function App() {
                         {summary.scannedAt
                           ? new Date(summary.scannedAt).toLocaleString()
                           : ""}{" "}
+                        ·{" "}
+                        {summary.backend === "ntfs"
+                          ? "NTFS metadata"
+                          : "Filesystem"}{" "}
                         · Logical sizes · Refresh to check for changes
                       </p>
                       {view !== "Treemap" &&

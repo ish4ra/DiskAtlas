@@ -2,7 +2,7 @@ import { parentPort, workerData } from "node:worker_threads";
 import { lstat } from "node:fs/promises";
 import { createWriteStream } from "node:fs";
 import { once } from "node:events";
-import { eligibleNtfs, scanNtfs } from "./ntfs";
+import { eligibleNtfs, scanNtfs, probeVolume } from "./ntfs";
 import { scanIndexed } from "./indexed-scanner";
 import { IndexStore } from "./index-store";
 import { csvCell } from "./analysis";
@@ -31,9 +31,9 @@ parentPort!.on(
         stopped = true;
       } else if (method === "scan") {
         if (busy) throw new Error("A scan is already running.");
-        busy = true;
         stopped = false;
         const scanId = store.begin(args[0] as string);
+        busy = true;
         try {
           let next: Summary;
           let fallback: string | undefined;
@@ -71,7 +71,15 @@ parentPort!.on(
           result = next;
           active = scanId;
           data = result;
-          if (!exporting) store.retain(active);
+          if (!exporting) {
+            try {
+              store.retain(active);
+            } catch {
+              result.warnings.push(
+                "Cache cleanup could not finish. Clear cached scans in Settings if space is low.",
+              );
+            }
+          }
         } catch (e) {
           store.fail(scanId);
           throw e;
@@ -86,19 +94,28 @@ parentPort!.on(
         active = args[0] as number;
         data = result;
       } else if (method === "summary") {
-        if (result) {
+        const snapshot = result;
+        if (snapshot) {
           try {
-            const root = await lstat(result.root);
-            result.unavailable =
+            const root = await lstat(snapshot.root);
+            snapshot.unavailable =
               root.isSymbolicLink() ||
               !root.isDirectory() ||
-              (!!result.rootIdentity &&
-                result.rootIdentity !== `${root.dev}:${root.ino}`);
+              (!!snapshot.rootIdentity &&
+                snapshot.rootIdentity !== `${root.dev}:${root.ino}`);
+            if (snapshot.volumeGuid) {
+              if (
+                !workerData?.nativeHelper ||
+                (await probeVolume(workerData.nativeHelper, snapshot.root)) !==
+                  snapshot.volumeGuid
+              )
+                snapshot.unavailable = true;
+            }
           } catch {
-            result.unavailable = true;
+            snapshot.unavailable = true;
           }
         }
-        data = result;
+        data = snapshot;
       } else if (method === "clear") {
         if (busy || exporting)
           throw new Error("Wait for scanning and exports to finish.");
@@ -163,7 +180,13 @@ parentPort!.on(
             throw e;
           } finally {
             exporting--;
-            if (!exporting && !busy) store.retain(active);
+            if (!exporting && !busy) {
+              try {
+                store.retain(active);
+              } catch {
+                /* Completed exports remain valid if maintenance fails. */
+              }
+            }
           }
           data = destination;
         } else throw new Error("Unsupported request.");

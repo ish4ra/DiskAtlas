@@ -1,4 +1,6 @@
-# DiskAtlas v0.1.0 design
+# Original DiskAtlas v0.1.0 design
+
+Historical design, superseded for production scanning by [persistent index architecture](index-architecture.md). The current production path has no entry-count ceiling.
 The supplied product brief is authoritative. Build a Windows Electron desktop utility with React and TypeScript, six sidebar destinations, a large custom treemap, real disk scanning, filtering, export and persisted preferences. Use muted blue, teal and amber on graphite surfaces, compact typography, and no destructive actions.
 
 A worker owns the normalized scan tree and all derived queries. Only progress summaries and bounded page/child results cross IPC. Iterative filesystem traversal avoids stack overflow, skips links and errors, and supports cooperative cancellation. A 500,000-entry ceiling produces an explicitly partial result rather than exhausting memory. All paths are logical sizes, not allocated bytes. Queries and exports operate on the worker-owned snapshot.

@@ -39,7 +39,8 @@ export async function scanIndexed(
     directory: true,
     children: [],
   });
-  if (stat.ino) store.seen(scanId, `${stat.dev}:${stat.ino}`);
+  if (Number.isSafeInteger(stat.ino) && stat.ino > 0)
+    store.seen(scanId, `${stat.dev}:${stat.ino}`);
   let nextId = 1;
   const result: Summary = {
     types: [],

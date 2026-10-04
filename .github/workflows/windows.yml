@@ -37,17 +37,19 @@ jobs:
       - run: npm run build
       - run: npm run test:e2e
       - name: Package installer and portable
-        run: npx electron-builder --win --x64 --publish never
+        run: npm run package:win -- --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
       - name: Install Windows package silently
         shell: pwsh
         run: |
           $target = Join-Path $env:RUNNER_TEMP 'DiskAtlasInstalled'
-          $installer = Join-Path $env:GITHUB_WORKSPACE 'release/DiskAtlas-Setup-0.1.0.exe'
+          $installer = Join-Path $env:GITHUB_WORKSPACE 'release/DiskAtlas-Setup-0.2.0-rc.1.exe'
           $process = Start-Process -FilePath $installer -ArgumentList '/S',"/D=$target" -PassThru -Wait
           if ($process.ExitCode -ne 0) { throw "Installer exited with $($process.ExitCode)" }
           if (!(Test-Path (Join-Path $target 'DiskAtlas.exe'))) { throw 'Installed executable is missing' }
+          & (Join-Path $target 'resources/native/diskatlas-ntfs.exe') --self-test
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged native helper validation failed' }
       - name: Validate installed application
         run: npm run test:e2e
         env:
@@ -55,7 +57,7 @@ jobs:
       - name: Validate portable application launch
         shell: pwsh
         run: |
-          $portable = Join-Path $env:GITHUB_WORKSPACE 'release/DiskAtlas-0.1.0-win-x64-portable.exe'
+          $portable = Join-Path $env:GITHUB_WORKSPACE 'release/DiskAtlas-0.2.0-rc.1-win-x64-portable.exe'
           $env:DISKATLAS_USER_DATA = Join-Path $env:RUNNER_TEMP 'DiskAtlasPortableSmoke'
           $process = Start-Process -FilePath $portable -PassThru
           try {
@@ -66,6 +68,9 @@ jobs:
               $window = Get-Process -Name DiskAtlas -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -eq 'DiskAtlas' }
             } until ($window -or (Get-Date) -gt $deadline)
             if (!$window) { throw 'Portable application did not create its window' }
+            $appPath = ($window | Select-Object -First 1).Path
+            & (Join-Path (Split-Path $appPath) 'resources/native/diskatlas-ntfs.exe') --self-test
+            if ($LASTEXITCODE -ne 0) { throw 'Portable native helper validation failed' }
           } finally {
             Get-Process -Name DiskAtlas -ErrorAction SilentlyContinue | Stop-Process -Force
             if (!$process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
@@ -79,7 +84,7 @@ jobs:
             playwright-report/
       - uses: actions/upload-artifact@v4
         with:
-          name: DiskAtlas-0.1.0-Windows-x64
+          name: DiskAtlas-0.2.0-rc.1-Windows-x64
           path: release/*.exe
           if-no-files-found: error
   release:
@@ -91,9 +96,12 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: DiskAtlas-0.1.0-Windows-x64
+          name: DiskAtlas-0.2.0-rc.1-Windows-x64
           path: release
       - name: Publish tagged release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" release/*.exe --repo "$GITHUB_REPOSITORY" --generate-notes
+        run: |
+          flags=()
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then flags+=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" release/*.exe --repo "$GITHUB_REPOSITORY" --generate-notes --verify-tag "${flags[@]}"
